@@ -10,9 +10,11 @@ use std::path::Path;
 fn main() {
     let args: Vec<String> = env::args().collect();
     let mut book_file_path = String::new();
-    let mut str_operation = String::new();
-    let book_file: json::JsonValue;
+    let mut book_file: json::JsonValue;
     let mut operation = ' ';
+
+    let locale_conf = LcCategory::all;
+    setlocale(locale_conf, "ru_RU.UTF-8");
 
     initscr();
 
@@ -67,65 +69,22 @@ fn main() {
             );
         }
 
-        // addstr("\n   Select operation / contact id:\n(a)dd | (e)dit | (r)emove | (q)uit > ");
-        addstr("\n   Select operation / contact id:\n\t\t\t(q)uit > ");
+        addstr("\n   Select operation / contact id:\n(a)dd | (e)dit | (r)emove | (q)uit > ");
         operation = getch() as u8 as char;
+
         match operation {
-            'a' => add(&book_file_path, &book_file),
+            'a' => {
+                add(&book_file_path, &mut book_file);
+            }
             'e' => edit(&book_file_path, &book_file),
             'r' => remove(&book_file_path, &book_file),
             'q' => (),
-            _ => {
-                if operation.is_numeric() {
-                    let mut selected = String::from(operation);
-
-                    getstr(&mut str_operation);
-                    selected += str_operation.as_str();
-
-                    let id = selected.parse::<usize>().unwrap() - 1;
-
-                    clear();
-
-                    loop {
-                        if let None = contacts.get(id) {
-                            str_operation = String::new();
-                            operation = ' ';
-                            break;
-                        }
-
-                        addstr(format!("   Address Book: {}\n", &book_file_path).as_str());
-                        addstr(format!(
-                            "Information about {}\n\nContact number: {}\nAddress: {}\nNote: {}\n",
-                            contacts[id].1,
-                            contacts[id].2,
-                            contacts[id].3,
-                            contacts[id].4
-                        ).as_str());
-
-                        // addstr("\n   Select operation / contact id:\n    (e)dit | (r)emove | (b)ack > ");
-                        addstr("\n   Select operation / contact id:\n\t\t\t(b)ack > ");
-                        operation = getch() as u8 as char;
-
-                        match operation {
-                            'e' => {
-                                edit_selected(&book_file_path, &book_file, id);
-                            },
-                            'r' => {
-                                remove_selected(&book_file_path, &book_file, id);
-                            },
-                            'b' | 'q' => {
-                                str_operation = String::new();
-                                operation = ' ';
-                                clear();
-                                break;
-                            },
-                            _ => (),
-                        }
-
-                        clear();
-                    }
-                }
-            }
+            _ => select(
+                &mut operation,
+                contacts,
+                book_file_path.as_str(),
+                &book_file,
+            ),
         }
 
         clear();
@@ -134,21 +93,207 @@ fn main() {
     endwin();
 }
 
+fn print_book_path(path: &str) {
+    clear();
+    addstr(format!("   Address Book: {}\n\n", path).as_str());
+}
+
 fn update(path: &str, object: &json::JsonValue) {
     let mut file = OpenOptions::new()
         .write(true)
         .open(path)
         .expect("Unable to open file!");
-    file.write_all(json::stringify_pretty(object.dump(), 4).as_bytes())
+    file.write_all(object.dump().as_bytes())
         .expect("Error while writing!");
 }
 
-fn add(path: &str, object: &json::JsonValue) {}
+fn select(
+    operation: &mut char,
+    contacts: Vec<(usize, &str, &str, &str, &str)>,
+    book_file_path: &str,
+    book_file: &json::JsonValue,
+) {
+    if operation.is_numeric() {
+        let mut str_operation = String::new();
+        let mut selected = String::from(*operation);
 
-fn edit(path: &str, object: &json::JsonValue) {}
+        getstr(&mut str_operation);
+        selected += str_operation.as_str();
+
+        let id = selected.parse::<usize>().unwrap() - 1;
+
+
+        loop {
+            if let None = contacts.get(id) {
+                *operation = ' ';
+                break;
+            }
+
+            print_book_path(book_file_path);
+            addstr(
+                format!(
+                    "Information about {}\n\nContact number: {}\nAddress: {}\nNote: {}\n",
+                    contacts[id].1, contacts[id].2, contacts[id].3, contacts[id].4
+                )
+                .as_str(),
+            );
+
+            addstr("\n   Select operation / contact id:\n    (e)dit | (r)emove | (b)ack > ");
+            *operation = getch() as u8 as char;
+
+            match operation {
+                'e' => {
+                    edit_selected(&book_file_path, book_file, id);
+                }
+                'r' => {
+                    remove_selected(&book_file_path, book_file, id);
+                }
+                'b' | 'q' => {
+                    *operation = ' ';
+                    clear();
+                    break;
+                }
+                _ => (),
+            }
+
+            clear();
+        }
+    }
+}
+
+fn add(path: &str, object: &mut json::JsonValue) {
+    let contact_id = object.len() + 1;
+    let mut contact_name = String::new();
+    let mut contact_number = String::new();
+    let mut contact_address = String::new();
+    let mut contact_note = String::new();
+    let mut operation = ' ';
+
+    print_book_path(path);
+    addstr("  All fields are optional\n\n");
+
+    addstr("Contact name: ");
+    getstr(&mut contact_name);
+
+    print_book_path(path);
+    addstr("  All fields are optional\n\n");
+
+    addstr("Contact number: ");
+    getstr(&mut contact_number);
+
+    print_book_path(path);
+    addstr("  All fields are optional\n\n");
+
+    addstr("Contact address: ");
+    getstr(&mut contact_address);
+
+    print_book_path(path);
+    addstr("  All fields are optional\n\n");
+
+    addstr("Contact note: ");
+    getstr(&mut contact_note);
+
+    print_book_path(path);
+
+    addstr(format!("Contact name:    \"{}\"", contact_name).as_str());
+    addstr(format!("\nContact number:  \"{}\"", contact_number).as_str());
+    addstr(format!("\nContact address: \"{}\"", contact_address).as_str());
+    addstr(format!("\nContact note:    \"{}\"", contact_note).as_str());
+
+    addstr("\n\n  Is that correct?\n(y) Yes | (Any Key) No | (Return) Back");
+    operation = getch() as u8 as char;
+
+    if operation == '\n' {
+        return;
+    }
+
+    match operation {
+        'y' => {
+            object
+                .push(json::array![
+                    contact_id,
+                    *contact_name,
+                    *contact_number,
+                    *contact_address,
+                    *contact_note,
+                ])
+                .expect("Error while pushing contact to the book!");
+            update(path, object);
+        }
+        _ => {
+            while operation != 'y' {
+                print_book_path(path);
+                addstr("You can press Return to return previous value\n\n");
+
+                addstr("Contact name: ");
+                operation = getch() as u8 as char;
+                if operation != '\n' {
+                    contact_name = String::new() + operation.to_string().as_str();
+                    getstr(&mut contact_name);
+                }
+
+                print_book_path(path);
+                addstr("You can press Return to return previous value\n\n");
+
+                addstr("Contact number: ");
+                operation = getch() as u8 as char;
+                if operation != '\n' {
+                    contact_number = String::new() + operation.to_string().as_str();
+                    getstr(&mut contact_number);
+                }
+
+                print_book_path(path);
+                addstr("You can press Return to return previous value\n\n");
+
+                addstr("Contact address: ");
+                operation = getch() as u8 as char;
+                if operation != '\n' {
+                    contact_address = String::new() + operation.to_string().as_str();
+                    getstr(&mut contact_address);
+                }
+
+                print_book_path(path);
+                addstr("You can press Return to return previous value\n\n");
+
+                addstr("Contact note: ");
+                operation = getch() as u8 as char;
+                if operation != '\n' {
+                    contact_note = String::new() + operation.to_string().as_str();
+                    getstr(&mut contact_note);
+                }
+
+                print_book_path(path);
+
+                addstr(format!("Contact name:    \"{}\"", contact_name).as_str());
+                addstr(format!("\nContact number:  \"{}\"", contact_number).as_str());
+                addstr(format!("\nContact address: \"{}\"", contact_address).as_str());
+                addstr(format!("\nContact note:    \"{}\"", contact_note).as_str());
+
+                addstr("\n\n  Is that correct?\n(y) Yes | (Any Key) No | (Return) Back");
+                operation = getch() as u8 as char;
+
+                if operation == '\n' {
+                    return;
+                }
+            }
+            object
+                .push(json::array![
+                    contact_id,
+                    contact_name,
+                    contact_number,
+                    contact_address,
+                    contact_note,
+                ])
+                .expect("Error while pushing contact to the book!");
+            update(path, object);
+        }
+    }
+}
 
 fn edit_selected(path: &str, object: &json::JsonValue, id: usize) {}
 
-fn remove(path: &str, object: &json::JsonValue) {}
-
 fn remove_selected(path: &str, object: &json::JsonValue, id: usize) {}
+
+fn edit(path: &str, object: &json::JsonValue) {}
+
+fn remove(path: &str, object: &json::JsonValue) {}
